@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 from scipy.stats import shapiro, zscore
 import seaborn as sns
+from dateutil.relativedelta import relativedelta
+import os
 
 '''
 Connecting to the Database and extracting the information to save it to the computer locally 
@@ -308,3 +310,197 @@ class DataFrameTransform():
         print(column_correlation_matrix)
         print("\nHighly Correlated Columns:")
         print(highly_correlated_columns)    
+
+'''
+Creating a class which runs the queries
+'''
+class Query():
+    
+    def __init__(self,my_dataframe):
+        self.my_dataframe = my_dataframe
+
+    #Recoveries as a percentage of the amounts funded (total and by investors) 
+    def percentage_recovered(self):
+        total_recovered = self.my_dataframe['total_payment'].sum()
+        total_recovered_inv = self.my_dataframe['total_payment_inv'].sum()
+        total_funded = self.my_dataframe['funded_amount'].sum()
+        total_funded_inv = self.my_dataframe['funded_amount_inv'].sum()
+        perc_rec = total_recovered / total_funded * 100
+        perc_rec_inv = total_recovered_inv / total_funded_inv * 100
+        return perc_rec, perc_rec_inv
+    
+    def percentages_loss(self):
+        numerator_total = self.my_dataframe[self.my_dataframe['loan_status'] == "Charged Off"].shape[0]
+        denominator_total = self.my_dataframe.shape[0]
+        percentage = (numerator_total / denominator_total) * 100
+        return percentage
+    
+    def percentage_loss_year(self):
+        self.my_dataframe['issue_date'] = pd.to_datetime(self.my_dataframe['issue_date'], format='%d/%m/%Y')
+        self.my_dataframe['year'] = self.my_dataframe['issue_date'].dt.year
+        unique_years = self.my_dataframe['year'].unique()
+        for year in unique_years:
+            year_df = self.my_dataframe[self.my_dataframe['year'] == year].copy()
+            charged_off_count = (year_df['loan_status'] == 'Charged Off').sum()
+            total_loans_count = year_df.shape[0]
+            percentage_losses = (charged_off_count / total_loans_count) * 100
+            print(f"For loans issued in {year}, the percentage of losses is: {percentage_losses:.2f}%")
+    
+    def amount_paid_before_loss(self):
+        charged_off = self.my_dataframe[self.my_dataframe['loan_status'] == "Charged Off"].copy()
+        amount_paid = round(charged_off['total_payment'].sum(),2)
+        amount_borrowed = round(charged_off['loan_amount'].sum(),2)
+        return print(f'The total amount paid back was {amount_paid} out of {amount_borrowed} total borrowed for these accounts.')
+    
+    def projected_loss(self):
+        charged_off = self.my_dataframe[self.my_dataframe['loan_status'] == "Charged Off"].copy()
+        amount_paid = round(charged_off['total_payment'].sum(),2)
+        potential_loss_nxtyr = (charged_off['funded_amount'] * (1 + charged_off['int_rate'] / 100)).sum()
+        recovery_amount = charged_off['recoveries'].sum() + charged_off['collection_recovery_fee'].sum()
+        projected_loss = potential_loss_nxtyr - amount_paid - recovery_amount
+        return print(f"The projected loss on the loans marked as CHARGED OFF for next year is £{round(projected_loss, 2)}")
+
+    def revenue_loss(self):
+        charged_off = self.my_dataframe[self.my_dataframe['loan_status'] == "Charged Off"].copy()
+        amount_paid = round(charged_off['total_payment'].sum(),2)
+        three_year_loans_co = self.my_dataframe[(self.my_dataframe['term'] == "36 months") & (self.my_dataframe['loan_status'] == 'Charged Off')].copy()
+        five_year_loans_co = self.my_dataframe[(self.my_dataframe['term'] == "60 months") & (self.my_dataframe['loan_status'] == 'Charged Off')].copy()
+        three_year_loans_funded = (three_year_loans_co['funded_amount'] * ((1 + three_year_loans_co['int_rate']/100) ** 3)).sum()
+        five_year_loans_funded = (five_year_loans_co['funded_amount'] * ((1 + five_year_loans_co['int_rate']/100) ** 5)).sum()
+        recovery_amount = charged_off['recoveries'].sum() + charged_off['collection_recovery_fee'].sum()
+        projected_revenue = five_year_loans_funded + three_year_loans_funded 
+        revenue_lost = projected_revenue - amount_paid - recovery_amount
+        return print(f" The loss of revenue the loans marked as CHARGED OFF would have generated would have been £{round(revenue_lost,2)}")
+
+    def cumulative_revenue_loss(self):
+        copy = self.my_dataframe.copy()
+        charged_off = copy[copy['loan_status'] == "Charged Off"].copy()
+        charged_off['issue_date'] = pd.to_datetime(charged_off['issue_date'], format='%d/%m/%Y')
+        charged_off['last_payment_date'] = pd.to_datetime(charged_off['last_payment_date'], format='%d/%m/%Y')
+        charged_off['term_completed'] = (charged_off['last_payment_date'] - charged_off['issue_date']).dt.days // 30
+        charged_off['term_left'] = np.where(charged_off['term'] == '36 months', 36 - charged_off['term_completed'], 60 - charged_off['term_completed'])
+        cumulative_revenue_lost = 0
+        monthly_revenue_lost = []
+        for i in range(1, (charged_off['term_left'].max()+1)): 
+            charged_off = charged_off[charged_off['term_left']>0].copy()
+            cumulative_revenue_lost += charged_off['instalment'].sum() 
+            monthly_revenue_lost.append(cumulative_revenue_lost) 
+            charged_off['term_left'] -= 1
+        return monthly_revenue_lost
+    
+    def percentage_late(self):
+        late_df = (self.my_dataframe['loan_status'].str.contains('Late', case=False, na=False))
+        late = late_df.sum()
+        all = self.my_dataframe.shape[0]
+        late_percentage = late / all * 100
+        return print(f"The percentage of current risk users from all the loans is {round(late_percentage,2)}%")
+    
+    def total_risk_and_potential_loss(self):
+        late_df = self.my_dataframe[self.my_dataframe['loan_status'].str.contains('Late', case=False, na=False)].copy()
+        late = late_df.shape[0]
+        print(f"The amount of people in the Risk bracket is {late}")
+        amount_paid = round(late_df['total_payment'].sum(),2)
+        total_funded_amount = late_df['funded_amount'].sum()
+        immediate_loss = total_funded_amount - amount_paid
+        print(f"The immediate loss if the Risk customers were charged off would be £{round(immediate_loss,2)}")
+        three_year_loans_late = late_df[late_df['term'] == "36 months"].copy()
+        five_year_loans_late = late_df[late_df['term'] == "60 months"].copy()
+        three_year_loans_funded = (three_year_loans_late['funded_amount'] * ((1 + three_year_loans_late['int_rate']/100) ** 3)).sum()
+        five_year_loans_funded = (five_year_loans_late['funded_amount'] * ((1 + five_year_loans_late['int_rate']/100) ** 5)).sum()
+        projected_revenue = five_year_loans_funded + three_year_loans_funded
+        potential_lost = projected_revenue - amount_paid
+        return print(f" The potential loss if the customers in this bracket were charged off is £{round(potential_lost,2)}")
+    
+    def percentage_total_revenue_lost(self):
+        copy_df = self.my_dataframe.copy()
+        loss = copy_df[(copy_df['loan_status'] == "Charged Off")|(copy_df['loan_status'].str.contains('Late', case=False, na=False))].copy()
+        loss['issue_date'] = pd.to_datetime(loss['issue_date'], format='%d/%m/%Y')
+        loss['last_payment_date'] = pd.to_datetime(loss['last_payment_date'], format='%d/%m/%Y')
+        loss['term_completed'] = (loss['last_payment_date'] - loss['issue_date']).dt.days // 30
+        loss['term_left'] = np.where(loss['term'] == '36 months', 36 - loss['term_completed'], 60 - loss['term_completed'])
+        cumulative_revenue_lost = 0
+        monthly_revenue_lost = []
+        for i in range(1, (loss['term_left'].max()+1)): 
+            loss = loss[loss['term_left']>0] 
+            cumulative_revenue_lost += loss['instalment'].sum() 
+            monthly_revenue_lost.append(cumulative_revenue_lost) 
+            loss['term_left'] -= 1
+        copy_df['issue_date'] = pd.to_datetime(copy_df['issue_date'], format='%d/%m/%Y')
+        copy_df['last_payment_date'] = pd.to_datetime(copy_df['last_payment_date'], format='%d/%m/%Y')
+        copy_df['term_completed'] = (copy_df['last_payment_date'] - copy_df['issue_date']).dt.days // 30
+        copy_df['term_left'] = np.where(copy_df['term'] == '36 months', 36 - copy_df['term_completed'], 60 - copy_df['term_completed'])
+        cumulative_potential_revenue = 0
+        potential_monthly_revenue = []
+        for i in range(1, (copy_df['term_left'].max())):
+            copy_df = copy_df[copy_df['term_left']>0] 
+            cumulative_potential_revenue += copy_df['instalment'].sum() 
+            potential_monthly_revenue.append(cumulative_potential_revenue) 
+            copy_df['term_left'] -= 1
+        percentages_revenue_lost = []
+        for i in range(len(potential_monthly_revenue)):
+            if potential_monthly_revenue[i] != 0:
+                percentage = monthly_revenue_lost[i] / potential_monthly_revenue[i] * 100
+                percentages_revenue_lost.append(percentage)
+            else:
+                percentages_revenue_lost.append(0)
+        return percentages_revenue_lost
+    
+    def indicator_of_loss_analysis(self,file_name):
+        charged_off_dataframe = self.my_dataframe[self.my_dataframe['loan_status'] == "Charged Off"].copy()
+        full_file_path = os.path.join(os.getcwd(), file_name)
+
+        if not os.path.exists(full_file_path):
+            charged_off_dataframe.to_csv(full_file_path, index=False)
+            print(f"DataFrame saved as {full_file_path}")
+        else:
+            print(f"A file with the name {full_file_path} already exists. DataFrame not saved.")
+
+    def indicator_of_potential_loss(self, file_name):
+        late_df = self.my_dataframe[self.my_dataframe['loan_status'].str.contains('Late', case=False, na=False)].copy()
+        full_file_path = os.path.join(os.getcwd(), file_name)
+
+        if not os.path.exists(full_file_path):
+            late_df.to_csv(full_file_path, index=False)
+            print(f"DataFrame saved as {full_file_path}")
+        else:
+            print(f"A file with the name {full_file_path} already exists. DataFrame not saved.")
+
+
+
+'''
+Creating a class which visualises the queries 
+'''
+class QueryVisualiser():
+
+    def __init__(self, my_dataframe):
+        self.my_dataframe = my_dataframe
+
+    def percentage_visuals(self, perc_rec, perc_rec_inv):
+        labels = ['Investor Recovered', 'Total Recovered']
+        percentages = [perc_rec_inv, perc_rec]
+        fig, ax = plt.subplots(figsize = (10,6))
+        bars = ax.bar(labels, percentages, color=['blue', 'blue'])
+        for bar in bars:
+            yval = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', fontsize=5)
+        plt.ylabel('Percentage')
+        plt.title('Recovery Percentages for Investors and Total')
+        plt.show()
+
+    def cumulative_revenue_loss(self, monthly_revenue_lost):
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(1, len(monthly_revenue_lost) + 1), monthly_revenue_lost, marker='o', linestyle='-', color='b')
+        plt.title('Cumulative Revenue Lost Over Time')
+        plt.xlabel('Months')
+        plt.ylabel('Cumulative Revenue Lost (USD)')
+        plt.grid(True)
+        plt.show()
+
+    def cumulative_potential_revenue_loss(self, percentages_revenue_lost):
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(1, len(percentages_revenue_lost) + 1), percentages_revenue_lost, marker='o', linestyle='-', color='b')
+        plt.title('Percentage of total expected revenue which is accounted for by customers who are at risk or have already defaulted')
+        plt.xlabel('Months')
+        plt.ylabel('Percentage per month')
+        plt.grid(True)
+        plt.show()
