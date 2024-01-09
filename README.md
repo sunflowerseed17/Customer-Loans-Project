@@ -1,6 +1,16 @@
-# Customer-Loans-Project
+# Customer Loans Project (AiCore)
+Table of Contents
+- [What is the project?](##what-is-the-project?)
+- [Installation](##installation)
+- [Steps Followed](##steps-followed)
+- [List of Definitions](##list-of-definitions)
+- [Skills Demonstrated](##skills-demonstrated)
 
-The project showcases the methods of cleaning and analysing large datasets, specifically for loan-related datasets. 
+![ ](https://static.thenounproject.com/png/2519452-200.png)
+
+## What is the project?
+
+The project showcases the methods of cleaning and analysing large datasets. The analysis of this project is on a Customer Loans dataset. 
 
 ## Installation
 
@@ -8,26 +18,36 @@ The project showcases the methods of cleaning and analysing large datasets, spec
 2) Running data_file.csv through data_file_transformation.ipynb cleans the data and creates the renditions of the database at different stages
 3) Running the appropriate .csv file through the querying_data.ipynb outputs important queries about the data
 
-## This project takes a database in the .csv format (specifically a database of financial and loan information).
- The original database is stored at data_file.csv.
+This project takes a database in the .csv format (specifically a database of financial and loan information).
+The original database is stored at data_file.csv.
 
-_The data_file_transformation.ipynb incrementally cleans the data at each stage through:_
-- Converting columns into the correct data formats
-- Assessing the missing data and what columns may need to be dropped in relation to this.
-- Imputing missing values which are applicable to imputation
-- Checking the normality of the columns and conducting transformations in order to normalise them
-- Visualising the data
-- Treating the data through removal of outliers
-- Checking for correlations between columns and removing columns as applicable
+## Steps followed 
 
-There are checkpoints at which the dataframe is saved after its transformations. 
-In this case normalized_data.csv is created after normality transformation have been applied.
-filtered_dataframe.csv is created at the end of the correlation analysis. 
+1) _The data_file_transformation.ipynb incrementally cleans the data at each stage through:_
+   - Converting columns into the correct data formats
+   -  Assessing the missing data and what columns may need to be dropped in relation to this.
+   -  Imputing missing values which are applicable to imputation
+   -  Checking the normality of the columns and conducting transformations in order to normalise them
+   -  Visualising the data
+   -  Treating the data through removal of outliers
+   -  Checking for correlations between columns and removing columns as applicable
 
-## Data analysis
-
-The querying_data.ipynb is the notebook to use in order to query the data. 
-It works side-by-side with the Query class and VisualiseQuery class in db_utils.py in order to provide functions for analysing the data. 
+2) There are checkpoints at which the dataframe is saved after its transformations. In this case normalized_data.csv is created after normality transformation have been applied. The filtered_dataframe.csv is created at the end of the correlation analysis.
+3) Data analysis :
+   - The querying_data.ipynb is the notebook to use in order to query the data. It works side-by-side with the Query class and VisualiseQuery class in db_utils.py in order to provide functions for analysing the data. 
+   - It visualises and answers:
+     - The percentage of recoveries based on investor funding and total funding
+     - The percentage of loans that have been a loss for the company
+     - The percetnage of loans which have been charged off historically
+     - The total amount which was paid towards these loans before they were charged off
+     - The projected loss of the loans marked as charged off
+     - The loss in revenue for the loans which were charged off if they had finished their term
+     - The loss of revenue month-on-month
+     - The percentage of users which present a risk to the company revenue
+     - The amount of customers who are deemed a risk and how much loss the company would incur if their status was changed to 'charged off'
+     - The percentage of total expected revenue represented by risky customers and customers who have already defaulted on their loans
+     - Analysis pointing out what the indicators of loss may be based on the information of the customers who were 'charged off'
+     - 
 
 
 ## List of definitions
@@ -78,3 +98,12 @@ Here is the list of definitions for each data-file.csv columns:
         <li> **application_type**: Indicates whether the loan is an individual application or a joint application with two co-borrowers</li>
     </ul>
 </details>
+
+## Skills Demonstrated
+
+- Python
+- Data analysis through python coding
+- Python notebook use
+- Cleaning data
+- Visualisation of data insights in python
+- Large dataset management in the financial context
